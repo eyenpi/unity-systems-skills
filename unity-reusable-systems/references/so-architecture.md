@@ -123,6 +123,34 @@ public class RuntimeSetMember<T> : MonoBehaviour where T : Component
 
 ## SO Config
 
-A ScriptableObject that holds only serialized fields — no runtime state, no methods beyond validation. Used for designer-tunable settings: health values, spawn rates, drop tables, UI layout params.
+A ScriptableObject that holds only serialized fields — no runtime state, no methods beyond validation. Used for designer-tunable settings: health values, spawn rates, drop tables, UI layout params. **Every primitive or value-type field you'd put on a MonoBehaviour belongs here instead.**
 
-No code snippet needed. Just a `ScriptableObject` subclass with `[CreateAssetMenu]` and serialized fields.
+```csharp
+[CreateAssetMenu(menuName = "Combat/Weapon Config")]
+public class WeaponConfig : ScriptableObject
+{
+    [Header("Damage")]
+    public float baseDamage = 10f;
+    public float critMultiplier = 2f;
+    public AnimationCurve falloffCurve;
+
+    [Header("Detection")]
+    public LayerMask hitLayers;
+    public float attackRange = 1.5f;
+}
+```
+
+The MonoBehaviour references the SO — never duplicates its fields:
+
+```csharp
+[RequireComponent(typeof(Collider2D))]
+public class HitDetector : MonoBehaviour
+{
+    [SerializeField] private WeaponConfig config;  // single SO ref
+    [SerializeField] private GameEvent onHitDealt;  // SO Event Channel
+
+    // Uses config.hitLayers, config.attackRange, etc.
+}
+```
+
+This lets designers create multiple config variants (e.g. "Sword", "Spear", "Fists") as assets and swap them without touching code.

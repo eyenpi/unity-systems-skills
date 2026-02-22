@@ -22,6 +22,7 @@ Target: Unity 6+ / C# 11.
 |--------|-------|
 | One system = one UPM package | Create a "shared contracts" package with interfaces |
 | Data in ScriptableObjects, behavior in MonoBehaviours | Put data and behavior in the same class |
+| MonoBehaviour `[SerializeField]` only for SO refs, component refs, scene refs, UnityEvents | `[SerializeField]` primitives (float, int, bool, string, LayerMask, enum, AnimationCurve) directly on MonoBehaviours — these belong in an SO Config asset |
 | SO Event Channels for cross-system communication | Use singletons, service locators, or static managers |
 | One assembly definition per folder (Runtime, Editor, Tests) | Ship without assembly definitions |
 | Version Defines for optional cross-package awareness | Use `#if` defines without versionDefines in asmdef |
@@ -52,6 +53,254 @@ Target: Unity 6+ / C# 11.
 - Cross-package, always installed together? → **SO Event Channel**
 - Cross-package, optionally installed? → **Version Defines + SO Event Channel or bridge package**
 
+## MonoBehaviour Field Rule
+
+A MonoBehaviour's `[SerializeField]` fields must only be references — never raw config values.
+
+**Allowed on a MonoBehaviour:**
+- SO references: config SOs, event channels, ScriptableVariables, RuntimeSets
+- Component / GameObject references (scene wiring)
+- UnityEvents (designer-hookable callbacks)
+
+**Belongs in an SO Config asset instead:**
+- Primitives and value types: float, int, bool, string, enum
+- Unity structs: LayerMask, Color, AnimationCurve, Vector2/3
+- Arrays/lists of the above
+
+WRONG — config on the component:
+
+```csharp
+public class GroundDetector2D : MonoBehaviour
+{
+    [SerializeField] private LayerMask groundLayers;   // config!
+    [SerializeField] private float boxWidth = 0.9f;    // config!
+    [SerializeField] private float castDistance = 0.1f; // config!
+}
+```
+
+RIGHT — config in an SO, component holds one reference:
+
+```csharp
+[CreateAssetMenu(menuName = "Platformer2D/Ground Detection Config")]
+public class GroundDetectionConfig : ScriptableObject
+{
+    public LayerMask groundLayers;
+    public float boxWidthMultiplier = 0.9f;
+    public float castDistance = 0.1f;
+}
+
+[RequireComponent(typeof(Collider2D))]
+public class GroundDetector2D : MonoBehaviour
+{
+    [SerializeField] private GroundDetectionConfig config; // one SO ref
+}
+```
+
+## Core SO Patterns
+
+### SO Config
+
+A ScriptableObject holding only serialized fields — designer-tunable settings. **Every primitive you'd put on a MonoBehaviour belongs here instead.**
+
+```csharp
+[CreateAssetMenu(menuName = "Combat/Weapon Config")]
+public class WeaponConfig : ScriptableObject
+{
+    public float baseDamage = 10f;
+    public float critMultiplier = 2f;
+    public LayerMask hitLayers;
+    public float attackRange = 1.5f;
+}
+```
+
+### ScriptableVariable\<T\>
+
+Shared runtime state as an asset. Any component can read/write. Resets on play mode exit.
+
+```csharp
+public abstract class ScriptableVariable<T> : ScriptableObject
+{
+    [SerializeField] private T initialValue;
+    [System.NonSerialized] private T runtimeValue;
+
+    public T Value
+    {
+        get => runtimeValue;
+        set => runtimeValue = value;
+    }
+
+    private void OnEnable() => runtimeValue = initialValue;
+}
+
+// Concrete types for the serializer:
+[CreateAssetMenu(menuName = "Variables/Float")]
+public class FloatVariable : ScriptableVariable<float> { }
+```
+
+### SO Event Channel
+
+Fire-and-forget broadcast. Publishers and subscribers share an asset reference — never each other.
+
+```csharp
+[CreateAssetMenu(menuName = "Events/Game Event")]
+public class GameEvent : ScriptableObject
+{
+    private readonly List<Action> listeners = new();
+
+    public void Raise()
+    {
+        for (int i = listeners.Count - 1; i >= 0; i--)
+            listeners[i]?.Invoke();
+    }
+
+    public void Subscribe(Action listener) => listeners.Add(listener);
+    public void Unsubscribe(Action listener) => listeners.Remove(listener);
+}
+```
+
+Create one concrete SO per payload type (void, float, int, Vector3, DamageInfo, etc.). Generic SO base classes are not directly serializable — always create concrete leaf types.
+
+### GameEventListener
+
+Bridges SO Event Channels to the scene via UnityEvent. Designers wire responses in the Inspector.
+
+```csharp
+public class GameEventListener : MonoBehaviour
+{
+    [SerializeField] private GameEvent gameEvent;
+    [SerializeField] private UnityEvent response;
+
+    private void OnEnable() => gameEvent.Subscribe(OnEventRaised);
+    private void OnDisable() => gameEvent.Unsubscribe(OnEventRaised);
+
+    private void OnEventRaised() => response.Invoke();
+}
+```
+
+### RuntimeSet\<T\>
+
+Self-registering collection of active instances. Replaces `FindObjectsOfType`.
+
+```csharp
+public abstract class RuntimeSet<T> : ScriptableObject
+{
+    private readonly List<T> items = new();
+    public IReadOnlyList<T> Items => items;
+
+    public void Add(T item) { if (!items.Contains(item)) items.Add(item); }
+    public void Remove(T item) => items.Remove(item);
+}
+```
+
+## Component Composition
+
+One entity, multiple focused components. Each MonoBehaviour references SOs — never raw config.
+
+```csharp
+[RequireComponent(typeof(HealthComponent))]
+public class Mover : MonoBehaviour
+{
+    [SerializeField] private FloatVariable moveSpeed; // ScriptableVariable
+    public void Move(Vector3 direction) =>
+        transform.Translate(direction * moveSpeed.Value * Time.deltaTime);
+}
+
+public class WeaponController : MonoBehaviour
+{
+    [SerializeField] private WeaponConfig config;  // SO Config
+    [SerializeField] private GameEvent onAttack;    // SO Event Channel
+    public void Attack() => onAttack.Raise();
+}
+```
+
+## Package Structure
+
+```
+com.{company}.{system}/
+├── package.json
+├── Runtime/
+│   ├── {Company}.{System}.asmdef
+│   ├── Components/          # MonoBehaviours
+│   ├── Data/                # ScriptableObjects (config, definitions)
+│   ├── Events/              # SO Event Channels
+│   └── Variables/           # ScriptableVariables, RuntimeSets
+├── Editor/
+│   ├── {Company}.{System}.Editor.asmdef
+│   └── SampleSceneGenerator.cs
+├── Tests/
+│   └── Editor/
+│       └── {Company}.{System}.Tests.asmdef
+└── Samples~/
+    └── BasicUsage/
+```
+
+Runtime asmdef — use `versionDefines` for optional cross-package awareness:
+
+```json
+{
+  "name": "MyStudio.Inventory",
+  "rootNamespace": "MyStudio.Inventory",
+  "references": [],
+  "versionDefines": [
+    {
+      "name": "com.mystudio.crafting",
+      "expression": "1.0.0",
+      "define": "MYSTUDIO_CRAFTING"
+    }
+  ]
+}
+```
+
+## Sample Scene Generator (Required)
+
+Every package must include `Editor/SampleSceneGenerator.cs` with menu item `Tools/{Company}/{System}/Create Sample Scene`. The generator must:
+
+1. Create a new scene
+2. Instantiate all SO assets (config, event channels, variables, runtime sets) into a data folder
+3. Create GameObjects with all components attached
+4. Wire every `[SerializeField]` — SO references, event channels, variables
+5. Press Play → system works without manual setup
+
+## Testing
+
+Test asmdef in `Tests/Editor/`:
+
+```json
+{
+  "name": "MyStudio.Inventory.Tests",
+  "references": ["MyStudio.Inventory", "UnityEngine.TestRunner", "UnityEditor.TestRunner"],
+  "includePlatforms": ["Editor"],
+  "overrideReferences": true,
+  "precompiledReferences": ["nunit.framework.dll"],
+  "testAssemblies": true
+}
+```
+
+Create SO instances in code, test, destroy. Never depend on asset files:
+
+```csharp
+[TestFixture]
+public class FloatVariableTests
+{
+    private FloatVariable variable;
+
+    [SetUp]
+    public void SetUp() => variable = ScriptableObject.CreateInstance<FloatVariable>();
+
+    [TearDown]
+    public void TearDown() => Object.DestroyImmediate(variable);
+
+    [Test]
+    public void Value_AfterSet_ReturnsNewValue()
+    {
+        variable.Value = 42f;
+        Assert.AreEqual(42f, variable.Value);
+    }
+}
+```
+
+Edit Mode unless you need MonoBehaviour lifecycle or physics. Edit Mode tests are faster and more reliable.
+
 ## New Package Checklist
 
 Before shipping any package, verify:
@@ -65,29 +314,18 @@ Before shipping any package, verify:
 - [ ] `CHANGELOG.md` following SemVer
 - [ ] All SOs have `[CreateAssetMenu]` with organized menu paths
 - [ ] All MonoBehaviours use `[RequireComponent]` where applicable
+- [ ] No `[SerializeField]` primitives on MonoBehaviours — all config in SO assets
 - [ ] SO Event Channels for every output event (no direct subscriber lists)
 - [ ] ScriptableVariables for any shared runtime state
 - [ ] RuntimeSets for any "all active X" queries
 - [ ] Version Defines in asmdef for any optional package awareness
 - [ ] No `FindObjectsOfType`, no singletons, no static mutable state
 
-## System Pattern Quick Reference
-
-| System | SO Config | SO Event Channels | ScriptableVariable | RuntimeSet | Bridge Pattern |
-|--------|-----------|-------------------|--------------------|------------|----------------|
-| Inventory | ItemDefinition, SlotConfig | OnItemAdded, OnItemRemoved | CurrentWeight, SlotCount | ActiveInventories | Version Defines to shop/crafting |
-| Combat | WeaponData, AttackConfig | OnHitDealt, OnHitReceived | — | ActiveCombatants | SO Event to health system |
-| Health | HealthConfig, ResistanceProfile | OnDamaged, OnHealed, OnDied | CurrentHP | ActiveHealthComponents | Listens to combat's SO Events |
-| Dialogue | DialogueTree, NodeData | OnDialogueStarted, OnChoiceMade | CurrentDialogue | — | Version Defines to quest system |
-| Save/Load | SaveConfig | OnSaveRequested, OnLoadComplete | — | SaveableEntities | Each system implements ISaveable |
-| Quest | QuestDefinition, ObjectiveData | OnQuestStarted, OnObjectiveComplete | ActiveQuest | ActiveQuests | Listens to dialogue/combat events |
-| AI | BehaviorTreeData, StateConfig | OnStateChanged | CurrentTarget | ActiveAIAgents | Version Defines to combat/nav |
-
 ## Reference Files
 
-Load these as needed — they contain code snippets and detailed patterns:
+For deeper details — extended code, edge cases, and advanced patterns:
 
-- **[references/package-structure.md](references/package-structure.md)** — UPM directory layout, asmdef setup, Version Defines, Define Constraints, SemVer rules, distribution
-- **[references/so-architecture.md](references/so-architecture.md)** — ScriptableVariable, SO Event Channel, GameEventListener, RuntimeSet code patterns
-- **[references/patterns.md](references/patterns.md)** — Component composition, cross-package integration, bridge packages, SerializeReference, Awaitable async, system decomposition
-- **[references/testing.md](references/testing.md)** — Test asmdef setup, SO test patterns, event test patterns, Edit vs Play Mode guidance
+- **[references/package-structure.md](references/package-structure.md)** — Sample scene generator full code, Define Constraints, SemVer rules, distribution
+- **[references/so-architecture.md](references/so-architecture.md)** — Typed event channels, RuntimeSetMember, reset strategy details
+- **[references/patterns.md](references/patterns.md)** — Cross-package integration table, bridge packages, SerializeReference + polymorphism, Awaitable async
+- **[references/testing.md](references/testing.md)** — SO Event Channel test patterns, Edit vs Play Mode guidance, mocking
