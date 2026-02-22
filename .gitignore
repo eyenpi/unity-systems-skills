@@ -1,0 +1,6 @@
+# Worktrees
+.worktrees/
+
+# Process artifacts (not part of the skill)
+unity-reusable-systems/design.md
+unity-reusable-systems/docs/
