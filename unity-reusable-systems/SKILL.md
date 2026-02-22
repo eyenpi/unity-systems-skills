@@ -34,6 +34,7 @@ Target: Unity 6+ / C# 11.
 | Composition: many small components on one GameObject | One MonoBehaviour doing everything |
 | Interfaces only at package boundaries when SO Events can't solve it | Interfaces inside a single package |
 | Tests using ScriptableObject.CreateInstance in Edit Mode | Skipping tests because "it's just a SO" |
+| Editor menu item that generates a fully-wired sample scene | Shipping a package without a one-click working demo scene |
 
 ## Where Does This Code Belong?
 
@@ -60,6 +61,7 @@ Before shipping any package, verify:
 - [ ] `Editor/` with Editor-only asmdef (if any editor code exists)
 - [ ] `Tests/Editor/` with test asmdef using `overrideReferences` and `testAssemblies`
 - [ ] `Samples~/` with at least one importable sample
+- [ ] Editor menu item under `Tools/{Company}/{System}/Create Sample Scene` that generates a fully-wired demo scene — all SO assets instantiated, all components on GameObjects, all event channels and variables assigned, playable on first run
 - [ ] `CHANGELOG.md` following SemVer
 - [ ] All SOs have `[CreateAssetMenu]` with organized menu paths
 - [ ] All MonoBehaviours use `[RequireComponent]` where applicable
