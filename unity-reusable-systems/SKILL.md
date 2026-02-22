@@ -35,65 +35,21 @@ Target: Unity 6+ / C# 11.
 | Interfaces only at package boundaries when SO Events can't solve it | Interfaces inside a single package |
 | Tests using ScriptableObject.CreateInstance in Edit Mode | Skipping tests because "it's just a SO" |
 
-## Decision Flowchart: Where Does This Code Belong?
+## Where Does This Code Belong?
 
-```dot
-digraph where {
-  rankdir=TB;
-  node [shape=diamond];
+- Data or config? → **ScriptableObject**
+- Needs MonoBehaviour lifecycle? → **MonoBehaviour**
+- Editor-only tooling? → **Editor/ folder** (EditorWindow / PropertyDrawer)
+- Pure logic, no Unity deps? → **Plain C# class** in Runtime/
+- Otherwise → **MonoBehaviour**
 
-  start [label="New code" shape=box];
-  q1 [label="Is it data\nor config?"];
-  q2 [label="Does it need\nMonoBehaviour\nlifecycle?"];
-  q3 [label="Is it Editor-\nonly tooling?"];
-  q4 [label="Is it pure\nlogic with no\nUnity deps?"];
+## How Should Systems Communicate?
 
-  so [label="ScriptableObject" shape=box style=filled fillcolor="#d4edda"];
-  mono [label="MonoBehaviour" shape=box style=filled fillcolor="#cce5ff"];
-  editor [label="Editor/ folder\nEditorWindow or\nPropertyDrawer" shape=box style=filled fillcolor="#fff3cd"];
-  util [label="Plain C# class\nin Runtime/" shape=box style=filled fillcolor="#f8d7da"];
-
-  start -> q1;
-  q1 -> so [label="yes"];
-  q1 -> q2 [label="no"];
-  q2 -> mono [label="yes"];
-  q2 -> q3 [label="no"];
-  q3 -> editor [label="yes"];
-  q3 -> q4 [label="no"];
-  q4 -> util [label="yes"];
-  q4 -> mono [label="no"];
-}
-```
-
-## Decision Flowchart: How Should These Systems Talk?
-
-```dot
-digraph talk {
-  rankdir=TB;
-  node [shape=diamond];
-
-  start [label="System A needs\nto notify System B" shape=box];
-  q1 [label="Same package?"];
-  q2 [label="Same GameObject\nor parent-child?"];
-  q3 [label="Need to share\nruntime state?"];
-  q4 [label="Both packages\nalways installed\ntogether?"];
-
-  csharp [label="C# event or\ndelegate on the\ncomponent" shape=box style=filled fillcolor="#cce5ff"];
-  sovar [label="ScriptableVariable\n(shared SO asset)" shape=box style=filled fillcolor="#d4edda"];
-  sochan [label="SO Event Channel\n(fire and forget)" shape=box style=filled fillcolor="#d4edda"];
-  vdef [label="Version Defines +\nSO Event Channel\nor bridge package" shape=box style=filled fillcolor="#fff3cd"];
-
-  start -> q1;
-  q1 -> q2 [label="yes"];
-  q1 -> q3 [label="no"];
-  q2 -> csharp [label="yes"];
-  q2 -> sochan [label="no"];
-  q3 -> sovar [label="yes\n(read state)"];
-  q3 -> q4 [label="no\n(notify)"];
-  q4 -> sochan [label="yes"];
-  q4 -> vdef [label="no"];
-}
-```
+- Same package, same GameObject/parent-child? → **C# event/delegate**
+- Same package, different GameObjects? → **SO Event Channel**
+- Cross-package, sharing runtime state? → **ScriptableVariable**
+- Cross-package, always installed together? → **SO Event Channel**
+- Cross-package, optionally installed? → **Version Defines + SO Event Channel or bridge package**
 
 ## New Package Checklist
 
