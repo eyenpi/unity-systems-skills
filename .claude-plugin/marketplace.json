@@ -1,0 +1,25 @@
+{
+  "name": "unity-systems-skills",
+  "owner": {
+    "name": "eyenpi"
+  },
+  "metadata": {
+    "description": "Skills for building reusable Unity game systems with ScriptableObject-driven architecture"
+  },
+  "plugins": [
+    {
+      "name": "unity-reusable-systems",
+      "source": "./",
+      "description": "Teaches how to architect reusable Unity game systems as modular UPM packages with ScriptableObject-driven architecture, SO Event Channels, ScriptableVariables, and RuntimeSets",
+      "version": "1.0.0",
+      "author": {
+        "name": "eyenpi"
+      },
+      "repository": "https://github.com/eyenpi/unity-systems-skills",
+      "license": "MIT",
+      "keywords": ["unity", "game-development", "scriptableobject", "upm", "architecture"],
+      "category": "game-development",
+      "tags": ["unity", "gamedev", "scriptableobject", "upm-package", "architecture"]
+    }
+  ]
+}

@@ -16,7 +16,16 @@ Covers common systems like Inventory, Combat, Health, Dialogue, Save/Load, Quest
 
 ## Install
 
-### Using `npx` (recommended)
+### Claude Code Marketplace
+
+Add the marketplace and install the plugin:
+
+```bash
+/plugin marketplace add eyenpi/unity-systems-skills
+/plugin install unity-reusable-systems@unity-systems-skills
+```
+
+### Using `npx skills` (works with Claude Code, Cursor, Cline, and more)
 
 ```bash
 npx skills add eyenpi/unity-systems-skills
@@ -24,11 +33,10 @@ npx skills add eyenpi/unity-systems-skills
 
 ### Manual
 
-Clone or copy the `unity-reusable-systems/` folder into your project's `.agents/skills/` directory.
+Clone or copy the `skills/unity-reusable-systems/` folder into your project's `.claude/skills/` directory:
 
-For claude code use:
 ```bash
-cp -r unity-systems-skills/unity-reusable-systems ~/.claude/skills/
+cp -r skills/unity-reusable-systems ~/.claude/skills/
 ```
 
 ## What's Inside
@@ -51,7 +59,10 @@ Once installed, just ask Claude to build a system:
 
 > "Set up cross-system communication between my combat and audio packages"
 
-or use `/unity-reusable-systems` to include the skill in your prompt.
+Or invoke the skill directly:
+
+- **Claude Code marketplace**: `/unity-reusable-systems:unity-reusable-systems`
+- **npx skills**: `/unity-reusable-systems`
 
 ## License
 
