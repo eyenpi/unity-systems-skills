@@ -31,14 +31,6 @@ Add the marketplace and install the plugin:
 npx skills add eyenpi/unity-systems-skills
 ```
 
-### Manual
-
-Clone or copy the `skills/unity-reusable-systems/` folder into your project's `.claude/skills/` directory:
-
-```bash
-cp -r skills/unity-reusable-systems ~/.claude/skills/
-```
-
 ## What's Inside
 
 | File | Description |
