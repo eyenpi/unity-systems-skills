@@ -36,6 +36,8 @@ Target: Unity 6+ / C# 11.
 | Interfaces only at package boundaries when SO Events can't solve it | Interfaces inside a single package |
 | Tests using ScriptableObject.CreateInstance in Edit Mode | Skipping tests because "it's just a SO" |
 | Editor menu item that generates a fully-wired sample scene | Shipping a package without a one-click working demo scene |
+| Generate `docs/packages/<package-name>.md` with full integration surface | Create a package without documenting its public events, variables, and interfaces |
+| Read all `docs/packages/*.md` before designing a new package | Design a new package without checking what existing packages expose |
 
 ## Where Does This Code Belong?
 
@@ -52,6 +54,24 @@ Target: Unity 6+ / C# 11.
 - Cross-package, sharing runtime state? → **ScriptableVariable**
 - Cross-package, always installed together? → **SO Event Channel**
 - Cross-package, optionally installed? → **Version Defines + SO Event Channel or bridge package**
+
+## Integration Discovery
+
+Before designing a new package, read every file in `docs/packages/*.md`. These documents describe the integration surface of each existing package — their event channels, ScriptableVariables, RuntimeSets, and interfaces.
+
+**Discovery steps:**
+
+1. Read all `docs/packages/*.md` files. If the folder doesn't exist, this is the first package — skip to step 4.
+2. List every event channel, ScriptableVariable, RuntimeSet, and interface from existing packages that is relevant to the new package.
+3. Produce an **Integration Plan** as part of the new package design:
+   - **Listen to** — existing events the new package should subscribe to (via Version Defines)
+   - **Publish** — new events the new package should raise for others to consume
+   - **Read/Write** — existing ScriptableVariables the new package should use
+   - **Expose** — new ScriptableVariables the new package should create for shared state
+   - **Implement** — existing interfaces the new package should implement
+   - **Bridge needed?** — whether a Bridge Package is required for complex cross-package logic
+   - **Suggested changes to existing packages** — checklist of Version Defines, listeners, or asmdef updates other packages could add to become aware of the new package
+4. After building the package, generate `docs/packages/<package-name>.md` (see Package Integration Doc below).
 
 ## MonoBehaviour Field Rule
 
@@ -261,6 +281,53 @@ Every package must include `Editor/SampleSceneGenerator.cs` with menu item `Tool
 4. Wire every `[SerializeField]` — SO references, event channels, variables
 5. Press Play → system works without manual setup
 
+## Package Integration Doc
+
+Every package must have a project-level integration doc at `docs/packages/<package-name>.md`. Generate this as the final step of package creation. If the `docs/packages/` directory doesn't exist, create it.
+
+Required sections:
+
+```markdown
+# <package-name> — Integration Surface
+
+## Event Channels
+
+| Event | Payload Type | Raised When | Suggested Listeners |
+|-------|-------------|-------------|---------------------|
+| `OnX` | `void` / concrete type | Description of trigger | Systems that should react |
+
+## ScriptableVariables
+
+| Variable | Type | Purpose |
+|----------|------|---------|
+| `VarName` | `FloatVariable` / concrete type | What this variable represents |
+
+## RuntimeSets
+
+| Set | Item Type | Purpose |
+|-----|-----------|---------|
+| `SetName` | `ComponentType` | What instances this set tracks |
+
+## Interfaces (Package Boundary)
+
+| Interface | Purpose | When to Implement |
+|-----------|---------|-------------------|
+| `IName` | What contract it defines | When another package should implement it |
+
+## Assembly & Version Define
+
+- **Assembly:** `{Company}.{System}`
+- **Package ID:** `com.{company}.{system}`
+- **Version Define symbol:** `{COMPANY}_{SYSTEM}`
+
+## Integration Examples
+
+- **SystemA** → listen to `OnX`, do Y
+- **SystemB** → read `VarName`, display Z
+```
+
+Omit any section that has no entries (e.g., if the package exposes no interfaces, omit "Interfaces"). Never omit Event Channels or Assembly & Version Define — every package has at least one event and an assembly.
+
 ## Testing
 
 Test asmdef in `Tests/Editor/`:
@@ -305,6 +372,7 @@ Edit Mode unless you need MonoBehaviour lifecycle or physics. Edit Mode tests ar
 
 Before shipping any package, verify:
 
+- [ ] Read all `docs/packages/*.md` and produce an Integration Plan before designing
 - [ ] `package.json` with correct `name`, `version`, `unity` (6000.0+), `displayName`
 - [ ] `Runtime/` with `{Company}.{Package}.asmdef` — zero external references
 - [ ] `Editor/` with Editor-only asmdef (if any editor code exists)
@@ -320,6 +388,7 @@ Before shipping any package, verify:
 - [ ] RuntimeSets for any "all active X" queries
 - [ ] Version Defines in asmdef for any optional package awareness
 - [ ] No `FindObjectsOfType`, no singletons, no static mutable state
+- [ ] Generate `docs/packages/<package-name>.md` with all events, variables, RuntimeSets, interfaces, and integration examples
 
 ## Reference Files
 
@@ -328,4 +397,5 @@ For deeper details — extended code, edge cases, and advanced patterns:
 - **[references/package-structure.md](references/package-structure.md)** — Sample scene generator full code, Define Constraints, SemVer rules, distribution
 - **[references/so-architecture.md](references/so-architecture.md)** — Typed event channels, RuntimeSetMember, reset strategy details
 - **[references/patterns.md](references/patterns.md)** — Cross-package integration table, bridge packages, SerializeReference + polymorphism, Awaitable async
+- **[references/integration-discovery.md](references/integration-discovery.md)** — Full integration doc template, discovery workflow example, bridge package decision criteria
 - **[references/testing.md](references/testing.md)** — SO Event Channel test patterns, Edit vs Play Mode guidance, mocking
